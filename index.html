@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevFeed — Developer News Hub</title>
+  <meta name="description" content="A modern RSS/news aggregator for developers. PHP, JavaScript, WordPress, AI, Security, and more." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+  <!-- Google Fonts: Fraunces (display/serif) + Source Code Pro (mono) + DM Sans (sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=DM+Sans:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ─── TOP BAR ─── -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-brand">
+      <svg class="brand-icon" viewBox="0 0 28 28" fill="none">
+        <rect x="2" y="2" width="10" height="10" rx="3" fill="#a78bfa"/>
+        <rect x="16" y="2" width="10" height="10" rx="3" fill="#60a5fa"/>
+        <rect x="2" y="16" width="10" height="10" rx="3" fill="#34d399"/>
+        <rect x="16" y="16" width="10" height="10" rx="3" fill="#fb923c"/>
+      </svg>
+      <span class="brand-name">DevFeed</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btnSettings" title="Settings">
+        <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 2.6 9a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 5 7a1.65 1.65 0 0 0-1-1.51V5a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 15 9a1.65 1.65 0 0 0 1.51 1H17a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="btnReader" title="Reading Preferences">
+        <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ─── TOPIC TABS ─── -->
+<nav class="tabs-wrap">
+  <div class="tabs" id="tabsList">
+    <!-- Tabs injected by JS -->
+  </div>
+</nav>
+
+<!-- ─── MAIN FEED ─── -->
+<main class="feed-container">
+  <div class="feed" id="feed">
+    <!-- Cards injected by JS -->
+  </div>
+  <div class="feed-empty" id="feedEmpty" style="display:none;">
+    <svg viewBox="0 0 64 64" width="80" height="80"><circle cx="32" cy="32" r="28" fill="none" stroke="#a78bfa" stroke-width="3" stroke-dasharray="8 4"/><text x="32" y="38" text-anchor="middle" font-size="26" fill="#a78bfa">📰</text></svg>
+    <p>No articles found for this topic.</p>
+    <span>Try adding more sources in Settings.</span>
+  </div>
+</main>
+
+<!-- ─── SETTINGS PANEL ─── -->
+<aside class="panel" id="settingsPanel">
+  <div class="panel-overlay" id="settingsOverlay"></div>
+  <div class="panel-content">
+    <div class="panel-header">
+      <h2>⚙️ Settings</h2>
+      <button class="panel-close" id="settingsClose">&times;</button>
+    </div>
+    <div class="panel-body" id="settingsBody">
+      <!-- Injected by JS -->
+    </div>
+  </div>
+</aside>
+
+<!-- ─── READER PANEL ─── -->
+<aside class="panel" id="readerPanel">
+  <div class="panel-overlay" id="readerOverlay"></div>
+  <div class="panel-content">
+    <div class="panel-header">
+      <h2>📖 Reading Options</h2>
+      <button class="panel-close" id="readerClose">&times;</button>
+    </div>
+    <div class="panel-body">
+      <!-- Font Family -->
+      <label class="setting-label">Font Style</label>
+      <div class="toggle-group" id="fontToggle">
+        <button class="toggle-btn active" data-font="sans">Sans Serif</button>
+        <button class="toggle-btn" data-font="serif">Serif</button>
+        <button class="toggle-btn" data-font="mono">Monospace</button>
+      </div>
+
+      <!-- Font Size -->
+      <label class="setting-label">Font Size</label>
+      <div class="size-slider-wrap">
+        <span class="size-label">Small</span>
+        <input type="range" id="fontSizeSlider" min="13" max="20" value="15" />
+        <span class="size-label">Large</span>
+      </div>
+      <div class="size-preview" id="sizePreview">Aa — Preview Text</div>
+
+      <!-- Background Color -->
+      <label class="setting-label">Background</label>
+      <div class="color-swatches" id="bgSwatches">
+        <button class="swatch active" data-bg="#0f0f12" title="Notion Dark"></button>
+        <button class="swatch" data-bg="#1a1a2e" title="Deep Navy"></button>
+        <button class="swatch" data-bg="#1e1e2e" title="Catppuccin"></button>
+        <button class="swatch" data-bg="#12131a" title="Midnight"></button>
+        <button class="swatch" data-bg="#1b1b1f" title="Carbon"></button>
+        <button class="swatch" data-bg="#0d1117" title="GitHub Dark"></button>
+        <button class="swatch" data-bg="#fafafa" title="Paper White"></button>
+        <button class="swatch" data-bg="#f5f0eb" title="Parchment"></button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ─── DISCLAIMER FOOTER ─── -->
+<footer class="disclaimer">
+  <p><strong>Disclaimer:</strong> DevFeed aggregates headlines and summaries from third-party RSS feeds and public APIs. We do not own, author, or endorse any of the linked content. All articles remain the intellectual property of their original publishers. Use at your own risk. For full articles, you will be redirected to the original source.</p>
+</footer>
+
+<script src="sources.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
