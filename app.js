@@ -344,7 +344,7 @@
 
   async function parseFeed(xmlOrHtml, sourceName, site, type = null) {
     const articles = [];
-
+    // ─── Patchstack HTML parsing ───
     if (type === 'patchstack') {
       // ─── Patchstack HTML parsing ───
       const parser = new DOMParser();
@@ -387,7 +387,89 @@
         });
       });
       return articles.slice(0, 20);
-    } else {
+
+    }
+    // ─── Wordfence HTML parsing ───
+    else if (type === "wordfence") {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlOrHtml, 'text/html');
+
+      // Two possible structures: cards (mobile) and table (desktop)
+      const cards = doc.querySelectorAll('.threat-intel-vulns-card');
+      const tableRows = doc.querySelectorAll('.threat-intel-vulns-table tbody tr');
+
+      // Prefer cards if present (more detailed), otherwise fall back to table
+      if (cards.length > 0) {
+        cards.forEach(card => {
+          const link = card.querySelector('.card-header a');
+          if (!link) return;
+
+          const title = link.textContent.trim();
+          const href = link.getAttribute('href');
+          const fullUrl = href.startsWith('http') ? href : 'https://www.wordfence.com' + href;
+
+          const cvssBadge = card.querySelector('.cvss-score-badge');
+          const cvss = cvssBadge ? cvssBadge.textContent.trim() : '';
+
+          const cveLink = card.querySelector('.vuln-card-cve a');
+          const cve = cveLink ? cveLink.textContent.trim() : '';
+
+          const dateEl = card.querySelector('.vuln-card-published-date');
+          const date = dateEl ? dateEl.textContent.trim() : new Date().toISOString();
+
+          const researcherEl = card.querySelector('.vuln-card-researchers a');
+          const author = researcherEl ? researcherEl.textContent.trim() : 'Wordfence';
+
+          articles.push({
+            title: title,
+            link: fullUrl,
+            date: date,
+            description: `${cvss ? 'CVSS: ' + cvss + ' – ' : ''}${cve ? cve + ' – ' : ''}${title}`,
+            image: '',
+            sourceName,
+            site,
+            author: author,
+            readingTime: '1 min read'
+          });
+        });
+      } else if (tableRows.length > 0) {
+        tableRows.forEach(row => {
+          const cells = row.querySelectorAll('td');
+          if (cells.length < 4) return;
+
+          const titleLink = cells[0].querySelector('a');
+          const title = titleLink ? titleLink.textContent.trim() : '';
+          const href = titleLink ? titleLink.getAttribute('href') : '';
+          const fullUrl = href ? (href.startsWith('http') ? href : 'https://www.wordfence.com' + href) : '';
+
+          const cveCell = cells[1].querySelector('a');
+          const cve = cveCell ? cveCell.textContent.trim() : '';
+
+          const cvssBadge = cells[2].querySelector('.cvss-score-badge');
+          const cvss = cvssBadge ? cvssBadge.textContent.trim() : '';
+
+          const researchers = cells[3].querySelectorAll('a');
+          const author = researchers.length ? Array.from(researchers).map(a => a.textContent.trim()).join(', ') : 'Wordfence';
+
+          const dateCell = cells[4];
+          const date = dateCell ? dateCell.textContent.trim() : new Date().toISOString();
+
+          articles.push({
+            title: title,
+            link: fullUrl,
+            date: date,
+            description: `${cvss ? 'CVSS: ' + cvss + ' – ' : ''}${cve ? cve + ' – ' : ''}${title}`,
+            image: '',
+            sourceName,
+            site,
+            author: author,
+            readingTime: '1 min read'
+          });
+        });
+      }
+    }
+    // ─── Normal RSS / Atom XML parsing ───
+    else {
       // ─── Normal RSS / Atom XML parsing ───
       const parser = new DOMParser();
       const doc = parser.parseFromString(xmlOrHtml, 'text/xml');
