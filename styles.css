@@ -234,6 +234,10 @@ img { max-width: 100%; display: block; }
   transform: translateY(-1px);
 }
 
+.card.read-article .card-img-wrap {
+  -webkit-filter: grayscale(100%);
+  filter: grayscale(100%);
+}
 .card.read-article img {
   -webkit-filter: grayscale(100%);
           filter: grayscale(100%);
