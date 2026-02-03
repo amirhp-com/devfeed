@@ -84,8 +84,7 @@ const DEFAULT_TOPICS = [
     color: "#34d399",
     icon: "🛡️",
     sources: [
-      { name: "Patchstack Blog", url: "https://patchstack.com/blog/feed/", site: "https://patchstack.com/blog" },
-      { name: "Patchstack Vulnerabilities", url: "https://patchstack.com/database/feed/", site: "https://patchstack.com/database" }
+      { name: "Patchstack", url: "https://patchstack.com/feed", site: "https://patchstack.com/articles/" }
     ]
   },
   {
@@ -95,7 +94,7 @@ const DEFAULT_TOPICS = [
     icon: "🔒",
     sources: [
       { name: "Wordfence Blog", url: "https://www.wordfence.com/blog/feed/", site: "https://www.wordfence.com/blog" },
-      { name: "Wordfence Alerts", url: "https://www.wordfence.com/threat-intelligence/feed/", site: "https://www.wordfence.com/threat-intelligence" }
+      { name: "Wordfence Alerts", url: "https://www.wordfence.com/feed", site: "https://www.wordfence.com/threat-intelligence" }
     ]
   },
   {
