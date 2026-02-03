@@ -3,7 +3,11 @@
  *  DevFeed — Main Application Logic  (updated)
  * ═══════════════════════════════════════════════════
  */
-
+/**
+ * ═══════════════════════════════════════════════════
+ *  DevFeed — Main Application Logic (updated)
+ * ═══════════════════════════════════════════════════
+ */
 (function () {
   'use strict';
 
@@ -21,9 +25,14 @@
   const feed = $('feed');
   const feedEmpty = $('feedEmpty');
   const tabsList = $('tabsList');
+  // NEW: reference for sub-tabs container
+  let subTabsList = $('subTabsList');
 
   // Near the top, after DOM refs
   let hideReadArticles = localStorage.getItem('devfeed_hideRead') === 'true';
+
+  // NEW: per-topic source filter state
+  let currentSource = JSON.parse(localStorage.getItem('devfeed_currentSource')) || {};
 
   // Update body class
   function updateReadVisibility() {
@@ -39,7 +48,6 @@
   function updateToggleReadButton() {
     const btn = document.getElementById('toggleRead');
     if (!btn) return;
-
     if (hideReadArticles) {
       btn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="currentColor">
@@ -54,7 +62,7 @@
         <circle cx="12" cy="12" r="3"/>
       </svg>
     `;
-      btn.setAttribute('data-tippy-content', 'Show all articles (including read)');
+      btn.setAttribute('data-tippy-content', 'Hide read articles');
     }
     initTooltips();
   }
@@ -78,13 +86,13 @@
   // ─── TIPPY INITIALIZATION ───
   function initTooltips() {
     tippy('[data-tippy-content]', {
-      placement: 'top',           // default position
+      placement: 'top',
       animation: 'shift-away',
-      duration: [200, 150],       // show / hide duration
-      delay: [300, 100],          // slight delay before show
+      duration: [200, 150],
+      delay: [300, 100],
       maxWidth: 280,
-      theme: 'material-dark',     // or 'light', 'material', etc.
-      allowHTML: true,            // if you ever want HTML in tooltips
+      theme: 'material-dark',
+      allowHTML: true,
       arrow: true,
       interactive: false,
       zIndex: 9999,
@@ -112,10 +120,23 @@
     });
     const toggleReadBtn = document.getElementById('toggleRead');
     if (toggleReadBtn) {
-      updateReadVisibility();       // apply saved state
-      updateToggleReadButton();     // show correct icon
+      updateReadVisibility();
+      updateToggleReadButton();
       toggleReadBtn.addEventListener('click', toggleReadVisibility);
     }
+
+    // NEW: create sub-tabs container if missing
+    if (!subTabsList) {
+      const subTabsWrap = document.createElement('nav');
+      subTabsWrap.className = 'sub-tabs-wrap';
+      subTabsList = document.createElement('div');
+      subTabsList.id = 'subTabsList';
+      subTabsList.className = 'sub-tabs';
+      subTabsWrap.appendChild(subTabsList);
+      const feedContainer = feed.parentElement;
+      feedContainer.insertBefore(subTabsWrap, feed);
+    }
+
     selectTab(currentTab || topics[0]?.key);
   });
 
@@ -126,15 +147,17 @@
       const saved = JSON.parse(localStorage.getItem('devfeed_topics'));
       if (Array.isArray(saved)) saved.forEach(t => { if (!topics.find(x => x.key === t.key)) topics.push(t); });
     } catch (_) { }
-
     try { const e = JSON.parse(localStorage.getItem('devfeed_enabled')); if (e) enabled = e; } catch (_) { }
     try { const s = JSON.parse(localStorage.getItem('devfeed_sourceOn')); if (s) sourceOn = s; } catch (_) { }
     try { const r = JSON.parse(localStorage.getItem('devfeed_reader')); if (r) readerPrefs = { ...readerPrefs, ...r }; } catch (_) { }
-
     try {
       const savedRead = JSON.parse(localStorage.getItem('devfeed_read')) || [];
       readArticles = new Set(savedRead);
     } catch (_) { }
+    // NEW: load saved per-topic source filters
+    try {
+      currentSource = JSON.parse(localStorage.getItem('devfeed_currentSource')) || {};
+    } catch (_) { currentSource = {}; }
 
     topics.forEach(t => {
       if (!(t.key in enabled)) enabled[t.key] = true;
@@ -148,6 +171,8 @@
     localStorage.setItem('devfeed_topics', JSON.stringify(userAdded));
     localStorage.setItem('devfeed_enabled', JSON.stringify(enabled));
     localStorage.setItem('devfeed_sourceOn', JSON.stringify(sourceOn));
+    // NEW: save current source filters
+    localStorage.setItem('devfeed_currentSource', JSON.stringify(currentSource));
   }
 
   function saveReaderPrefs() {
@@ -176,6 +201,44 @@
     currentTab = key;
     document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
     showFeed(key);
+    // NEW: render sub-tabs when tab is selected
+    renderSubTabs(key);
+  }
+
+  /* ─── SUB-TABS (SOURCE FILTERS) ─── */
+  function renderSubTabs(key) {
+    subTabsList.innerHTML = '';
+    const topic = topics.find(t => t.key === key);
+    if (!topic) return;
+
+    const currentFilter = currentSource[key] || 'all';
+
+    // "All" button
+    const allBtn = document.createElement('button');
+    allBtn.className = 'sub-tab' + (currentFilter === 'all' ? ' active' : '');
+    allBtn.dataset.source = 'all';
+    allBtn.innerHTML = '<span>All</span>';
+    subTabsList.appendChild(allBtn);
+    allBtn.addEventListener('click', (e) => setSourceFilter(e, allBtn, key, 'all'));
+
+    // One button per active source
+    const activeSources = topic.sources.filter(s => sourceOn[key + '__' + s.name] !== false);
+    activeSources.forEach(source => {
+      const btn = document.createElement('button');
+      btn.className = 'sub-tab' + (currentFilter === source.name ? ' active' : '');
+      btn.dataset.source = source.name;
+      btn.innerHTML = `<span>${escHtml(source.name)}</span>`;
+      subTabsList.appendChild(btn);
+      btn.addEventListener('click', (e) => setSourceFilter(e, btn, key, source.name));
+    });
+  }
+
+  function setSourceFilter(e, btn, key, sourceName) {
+    currentSource[key] = sourceName;
+    btn.parentElement.querySelectorAll(".sub-tab.active").forEach(el => {el?.classList?.remove("active")});
+    btn.classList.add("active");
+    saveState(); // persist the filter
+    renderCards(cache[key] || [], key);
   }
 
   /* ═══ FEED ═══ */
@@ -199,15 +262,15 @@
     feedEmpty.style.display = 'none';
     for (let i = 0; i < 4; i++) {
       feed.insertAdjacentHTML('beforeend', `
-        <div class="card skeleton">
-          <div class="card-img-wrap"></div>
-          <div class="card-body" style="gap:12px;justify-content:center;">
-            <div class="skeleton-line" style="width:60%;height:11px;"></div>
-            <div class="skeleton-line" style="width:90%;height:14px;"></div>
-            <div class="skeleton-line" style="width:85%;height:12px;"></div>
-            <div class="skeleton-line" style="width:40%;height:11px;"></div>
-          </div>
-        </div>`);
+      <div class="card skeleton">
+        <div class="card-img-wrap"></div>
+        <div class="card-body" style="gap:12px;justify-content:center;">
+          <div class="skeleton-line" style="width:60%;height:11px;"></div>
+          <div class="skeleton-line" style="width:90%;height:14px;"></div>
+          <div class="skeleton-line" style="width:85%;height:12px;"></div>
+          <div class="skeleton-line" style="width:40%;height:11px;"></div>
+        </div>
+      </div>`);
     }
   }
 
@@ -218,20 +281,31 @@
       return;
     }
     feedEmpty.style.display = 'none';
+
     const topic = topics.find(t => t.key === key) || {};
-    // Filter out read articles if hideReadArticles is true
-    const visibleArticles = hideReadArticles ? articles.filter(a => !readArticles.has(a.link)) : articles;
+
+    // Apply source filter
+    const currentFilter = currentSource[key] || 'all';
+    let visibleArticles = articles;
+    if (currentFilter !== 'all') {
+      visibleArticles = articles.filter(a => a.sourceName === currentFilter);
+    }
+
+    // Apply read filter
+    visibleArticles = hideReadArticles ? visibleArticles.filter(a => !readArticles.has(a.link)) : visibleArticles;
+
     if (!visibleArticles.length) {
       feedEmpty.style.display = 'block';
       feedEmpty.innerHTML = `
-          <p>All articles in this tab are read.</p>
-          <span>Toggle to show read articles or mark some as unread.</span>
-        `;
+      <p>All articles in this tab are read or no articles from this source.</p>
+      <span>Toggle to show read articles or mark some as unread.</span>
+    `;
       return;
     }
 
     visibleArticles.forEach((a, i) => {
       const isRead = readArticles.has(a.link);
+      const readCheckboxId = `read-${key}-${i}`;
 
       const card = document.createElement('div');
       card.className = 'card' + (isRead ? ' read-article' : '');
@@ -244,67 +318,66 @@
       card.dataset.date = a.date || '';
 
       const faviconUrl = getFavicon(a.site || a.link);
-      const readCheckboxId = `read-${key}-${i}`;
 
       card.innerHTML = `
-              <div class="card-img-wrap">
-                  ${a.image
+      <div class="card-img-wrap">
+        ${a.image
           ? `<img src="${escHtml(a.image)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=card-img-placeholder>${topic.icon || '📰'}</div>'" />`
           : `<div class="card-img-placeholder">${topic.icon || '📰'}</div>`}
-              </div>
-              <div class="card-body">
-                  <div class="card-meta">
-                    <img class="meta-favicon" src="${escHtml(faviconUrl)}" alt="" onerror="this.style.display='none'" loading="lazy" />
-                    <span class="meta-site">${escHtml(a.sourceName || a.site || 'Unknown')}</span>
-                    <span class="meta-sep">•</span>
-                    <span>${formatDate(a.date)}</span>
-                    ${a.author ? `<span class="meta-sep">•</span><span class="meta-author">${escHtml(a.author)}</span>` : ''}
-                    <span class="meta-tag" style="background:${topic.color}22;color:${topic.color};">${escHtml(topic.name || key)}</span>
-                    <input type="checkbox" id="${readCheckboxId}" class="read-checkbox" ${isRead ? 'checked' : ''} />
-                    <label for="${readCheckboxId}" class="read-checkbox-label" data-tippy-content="${isRead ? 'Mark as unread' : 'Mark as read'}"></label>
-                  </div>
-                  <h3 class="card-title ${isRead ? 'read-title' : ''}">${escHtml(a.title)}</h3>
-                  <p class="card-desc">${escHtml(a.description)}</p>
-                  <div class="card-footer">
-                      <span class="footer-link">Read article →</span>
-                      <span class="footer-link open">Open in New Tab →</span>
-                  </div>
-              </div>`;
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
 
-      // Important: Force checkbox state after insertion into DOM
+        <img class="meta-favicon" src="${escHtml(faviconUrl)}" alt="" onerror="this.style.display='none'" loading="lazy" />
+        <span class="meta-site">${escHtml(a.sourceName || a.site || 'Unknown')}</span>
+        <span class="meta-sep">•</span>
+        <span>${formatDate(a.date)}</span>
+        ${a.author ? `<span class="meta-sep">•</span><span class="meta-author">${escHtml(a.author)}</span>` : ''}
+        <span class="meta-tag" style="background:${topic.color}22;color:${topic.color};">${escHtml(topic.name || key)}</span>
+        <input type="checkbox" id="${readCheckboxId}" class="read-checkbox" ${isRead ? 'checked' : ''} />
+        <label for="${readCheckboxId}" class="read-checkbox-label" data-tippy-content="${isRead ? 'Mark as unread' : 'Mark as read'}"></label>
+        </div>
+        <h3 class="card-title ${isRead ? 'read-title' : ''}">${escHtml(a.title)}</h3>
+        <p class="card-desc">${escHtml(a.description)}</p>
+        <div class="card-footer">
+          <span class="footer-link">Read article →</span>
+          <span class="footer-link open">Open in New Tab →</span>
+        </div>
+      </div>`;
+
+      // Force checkbox state
       const checkbox = card.querySelector(`#${readCheckboxId}`);
       if (checkbox) {
-        checkbox.checked = isRead;           // force sync
+        checkbox.checked = isRead;
       }
 
-      // Toggle read status when checkbox is clicked
-      checkbox.addEventListener('change', (e) => {
-        e.stopPropagation();
-
-        if (checkbox.checked) {
-          readArticles.add(a.link);
-          card.classList.add('read-article');
-          card.querySelector('.card-title').classList.add('read-title');
-        } else {
-          readArticles.delete(a.link);
-          card.classList.remove('read-article');
-          card.querySelector('.card-title').classList.remove('read-title');
-        }
-
-        saveReadState();
-      });
+      // Toggle read status
+      if (checkbox) {
+        checkbox.addEventListener('change', (e) => {
+          e.stopPropagation();
+          if (checkbox.checked) {
+            readArticles.add(a.link);
+            card.classList.add('read-article');
+            card.querySelector('.card-title').classList.add('read-title');
+          } else {
+            readArticles.delete(a.link);
+            card.classList.remove('read-article');
+            card.querySelector('.card-title').classList.remove('read-title');
+          }
+          saveReadState();
+        });
+      }
 
       // Open article → mark as read automatically
       card.addEventListener('click', (e) => {
-        // Skip if user clicked the "Open in New Tab" link
         if (e.target.closest('.footer-link.open')) {
           window.open(a.link, "_blank");
-          return; // let the <a> handle it naturally
+          return;
         }
         if (!e.target.closest('.read-checkbox, .read-checkbox-label')) {
           if (!readArticles.has(a.link)) {
             readArticles.add(a.link);
-            checkbox.checked = true;           // update checkbox visually
+            if (checkbox) checkbox.checked = true;
             card.classList.add('read-article');
             card.querySelector('.card-title').classList.add('read-title');
             saveReadState();

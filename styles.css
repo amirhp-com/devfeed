@@ -794,3 +794,52 @@ body.hide-read .feed:empty::after {
   font-size: 14px;
   padding: 0 20px 40px;
 }
+
+/* Sub-tabs (source filters) */
+.sub-tabs-wrap {
+  z-index: 89;
+  background: rgba(15,15,18,0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  border-radius: var(--radius-card);
+  margin-bottom: 1rem;
+}
+
+.sub-tabs {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.sub-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.sub-tab {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sub-tab:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.sub-tab.active {
+  background: var(--accent-violet);
+  color: white;
+  border-color: var(--accent-violet);
+}
