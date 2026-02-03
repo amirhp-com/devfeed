@@ -33,8 +33,8 @@ const DEFAULT_TOPICS = [
     icon: "⚡",
     sources: [
       { name: "JavaScript Weekly"  , url: "https://javaScriptweekly.com/rss", site: "https://javascriptweekly.com" },
-      { name: "Dev.to – JavaScript", url: "https://dev.to/feed/javascript", site: "https://dev.to/t/javascript" },
-      { name: "MDN Blog"           , url: "https://developer.mozilla.org/en/blog/rss.xml", site: "https://developer.mozilla.org/en/blog" },
+      { name: "Dev.to", url: "https://dev.to/feed/", site: "https://dev.to/t/javascript" },
+      { name: "MDN Blog"           , url: "https://developer.mozilla.org/en-US/blog/rss.xml", site: "https://developer.mozilla.org/en/blog" },
       { name: "CSS-Tricks"         , url: "https://css-tricks.com/feed/", site: "https://css-tricks.com" },
       { name: "Smashing Magazine"  , url: "https://www.smashingmagazine.com/feed/", site: "https://www.smashingmagazine.com" }
     ]
@@ -59,10 +59,9 @@ const DEFAULT_TOPICS = [
     icon: "🤖",
     sources: [
       { name: "Towards Data Science", url: "https://towardsdatascience.com/feed", site: "https://towardsdatascience.com" },
-      { name: "AI News", url: "https://ai-news.io/rss.xml", site: "https://ai-news.io" },
+      { name: "AI News", url: "https://www.artificialintelligence-news.com/feed/", site: "https://www.artificialintelligence-news.com" },
       { name: "The Gradient", url: "https://thegradient.pub/rss/", site: "https://thegradient.pub" },
-      { name: "Hugging Face Blog", url: "https://huggingface.co/papers/rss", site: "https://huggingface.co/blog" },
-      { name: "Google AI Blog", url: "https://ai.google/blog/rss", site: "https://ai.google/blog" }
+      { name: "Hugging Face Blog", url: "https://huggingface.co/blog/feed.xml", site: "https://huggingface.co/blog" },
     ]
   },
   {
