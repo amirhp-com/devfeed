@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════
- *  DevFeed — Main Application Logic  (v2)
+ *  DevFeed — Main Application Logic  (updated)
  * ═══════════════════════════════════════════════════
  */
 
@@ -9,24 +9,43 @@
 
   /* ─── CORS Proxy list (fallback chain) ─── */
   const CORS_PROXIES = [
+    'https://cors.amirhp.workers.dev/?url=',
     'https://api.allorigins.win/raw?url=',
     'https://corsproxy.io/?',
-    'https://api.codetabs.com/v1/proxy?quest='
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://cors-anywhere.herokuapp.com/'
   ];
 
   /* ─── DOM refs ─── */
   const $ = id => document.getElementById(id);
-  const feed       = $('feed');
-  const feedEmpty  = $('feedEmpty');
-  const tabsList   = $('tabsList');
+  const feed = $('feed');
+  const feedEmpty = $('feedEmpty');
+  const tabsList = $('tabsList');
 
   /* ─── State ─── */
-  let topics     = [];
-  let enabled    = {};
-  let sourceOn   = {};
+  let topics = [];
+  let enabled = {};
+  let sourceOn = {};
+  let readArticles = new Set();
   let currentTab = null;
-  let cache      = {};
+  let cache = {};
   let readerPrefs = { font: 'sans', size: 15, bg: '#0f0f12' };
+
+  // ─── TIPPY INITIALIZATION ───
+  function initTooltips() {
+    tippy('[data-tippy-content]', {
+      placement: 'top',           // default position
+      animation: 'shift-away',
+      duration: [200, 150],       // show / hide duration
+      delay: [300, 100],          // slight delay before show
+      maxWidth: 280,
+      theme: 'material-dark',     // or 'light', 'material', etc.
+      allowHTML: true,            // if you ever want HTML in tooltips
+      arrow: true,
+      interactive: false,
+      zIndex: 9999,
+    });
+  }
 
   /* ─── INIT ─── */
   document.addEventListener('DOMContentLoaded', () => {
@@ -37,19 +56,34 @@
     bindPanels();
     bindReader();
     bindReaderModal();
+    initTooltips();
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        const modal = $('readerModal');
+        if (modal && modal.classList.contains('open')) {
+          closeArticleReader();
+        }
+      }
+    });
     selectTab(currentTab || topics[0]?.key);
   });
 
   /* ═══ PERSISTENCE ═══ */
-  function loadState () {
+  function loadState() {
     topics = getDefaultTopics();
     try {
       const saved = JSON.parse(localStorage.getItem('devfeed_topics'));
       if (Array.isArray(saved)) saved.forEach(t => { if (!topics.find(x => x.key === t.key)) topics.push(t); });
-    } catch (_) {}
-    try { const e = JSON.parse(localStorage.getItem('devfeed_enabled'));  if (e) enabled  = e; } catch (_) {}
-    try { const s = JSON.parse(localStorage.getItem('devfeed_sourceOn')); if (s) sourceOn = s; } catch (_) {}
-    try { const r = JSON.parse(localStorage.getItem('devfeed_reader'));   if (r) readerPrefs = { ...readerPrefs, ...r }; } catch (_) {}
+    } catch (_) { }
+
+    try { const e = JSON.parse(localStorage.getItem('devfeed_enabled')); if (e) enabled = e; } catch (_) { }
+    try { const s = JSON.parse(localStorage.getItem('devfeed_sourceOn')); if (s) sourceOn = s; } catch (_) { }
+    try { const r = JSON.parse(localStorage.getItem('devfeed_reader')); if (r) readerPrefs = { ...readerPrefs, ...r }; } catch (_) { }
+
+    try {
+      const savedRead = JSON.parse(localStorage.getItem('devfeed_read')) || [];
+      readArticles = new Set(savedRead);
+    } catch (_) { }
 
     topics.forEach(t => {
       if (!(t.key in enabled)) enabled[t.key] = true;
@@ -57,17 +91,24 @@
     });
   }
 
-  function saveState () {
+  function saveState() {
     const defaults = getDefaultTopics();
     const userAdded = topics.filter(t => !defaults.find(d => d.key === t.key));
-    localStorage.setItem('devfeed_topics',   JSON.stringify(userAdded));
-    localStorage.setItem('devfeed_enabled',  JSON.stringify(enabled));
+    localStorage.setItem('devfeed_topics', JSON.stringify(userAdded));
+    localStorage.setItem('devfeed_enabled', JSON.stringify(enabled));
     localStorage.setItem('devfeed_sourceOn', JSON.stringify(sourceOn));
   }
-  function saveReaderPrefs () { localStorage.setItem('devfeed_reader', JSON.stringify(readerPrefs)); }
+
+  function saveReaderPrefs() {
+    localStorage.setItem('devfeed_reader', JSON.stringify(readerPrefs));
+  }
+
+  function saveReadState() {
+    localStorage.setItem('devfeed_read', JSON.stringify([...readArticles]));
+  }
 
   /* ═══ TABS ═══ */
-  function renderTabs () {
+  function renderTabs() {
     tabsList.innerHTML = '';
     topics.forEach(t => {
       if (!enabled[t.key]) return;
@@ -80,14 +121,14 @@
     });
   }
 
-  function selectTab (key) {
+  function selectTab(key) {
     currentTab = key;
     document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
     showFeed(key);
   }
 
   /* ═══ FEED ═══ */
-  function showFeed (key) {
+  function showFeed(key) {
     if (cache[key]) { renderCards(cache[key], key); return; }
     renderSkeleton();
     fetchTopic(key).then(articles => {
@@ -97,9 +138,12 @@
     });
   }
 
-  function updateCount (key, n) { const el = $('count_' + key); if (el) el.textContent = n; }
+  function updateCount(key, n) {
+    const el = $('count_' + key);
+    if (el) el.textContent = n;
+  }
 
-  function renderSkeleton () {
+  function renderSkeleton() {
     feed.innerHTML = '';
     feedEmpty.style.display = 'none';
     for (let i = 0; i < 4; i++) {
@@ -116,54 +160,100 @@
     }
   }
 
-  function renderCards (articles, key) {
+  function renderCards(articles, key) {
     feed.innerHTML = '';
-    if (!articles.length) { feedEmpty.style.display = 'block'; return; }
+    if (!articles.length) {
+      feedEmpty.style.display = 'block';
+      return;
+    }
     feedEmpty.style.display = 'none';
+
     const topic = topics.find(t => t.key === key) || {};
 
     articles.forEach((a, i) => {
-      /* cards are <div> now — click opens in-app reader */
+      const isRead = readArticles.has(a.link);
+
       const card = document.createElement('div');
-      card.className = 'card';
+      card.className = 'card' + (isRead ? ' read-article' : '');
       card.style.animationDelay = (i * 0.04) + 's';
-      card.dataset.link        = a.link || '';
-      card.dataset.title       = a.title || '';
-      card.dataset.image       = a.image || '';
-      card.dataset.sourceName  = a.sourceName || '';
-      card.dataset.site        = a.site || '';
-      card.dataset.date        = a.date || '';
+      card.dataset.link = a.link || '';
+      card.dataset.title = a.title || '';
+      card.dataset.image = a.image || '';
+      card.dataset.sourceName = a.sourceName || '';
+      card.dataset.site = a.site || '';
+      card.dataset.date = a.date || '';
 
       const faviconUrl = getFavicon(a.site || a.link);
+      const readCheckboxId = `read-${key}-${i}`;
 
       card.innerHTML = `
-        <div class="card-img-wrap">
-          ${a.image
-            ? `<img src="${escHtml(a.image)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=card-img-placeholder>${topic.icon || '📰'}</div>'" />`
-            : `<div class="card-img-placeholder">${topic.icon || '📰'}</div>`}
-        </div>
-        <div class="card-body">
-          <div class="card-meta">
-            <img class="meta-favicon" src="${escHtml(faviconUrl)}" alt="" onerror="this.style.display='none'" loading="lazy" />
-            <span class="meta-site">${escHtml(a.sourceName || a.site || 'Unknown')}</span>
-            <span class="meta-sep">•</span>
-            <span>${formatDate(a.date)}</span>
-            <span class="meta-tag" style="background:${topic.color}22;color:${topic.color};">${escHtml(topic.name || key)}</span>
-          </div>
-          <h3 class="card-title">${escHtml(a.title)}</h3>
-          <p class="card-desc">${escHtml(a.description)}</p>
-          <div class="card-footer">
-            <span class="footer-link">Read article →</span>
-          </div>
-        </div>`;
+              <div class="card-img-wrap">
+                  ${a.image
+          ? `<img src="${escHtml(a.image)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=card-img-placeholder>${topic.icon || '📰'}</div>'" />`
+          : `<div class="card-img-placeholder">${topic.icon || '📰'}</div>`}
+              </div>
+              <div class="card-body">
+                  <div class="card-meta">
+                    <img class="meta-favicon" src="${escHtml(faviconUrl)}" alt="" onerror="this.style.display='none'" loading="lazy" />
+                    <span class="meta-site">${escHtml(a.sourceName || a.site || 'Unknown')}</span>
+                    <span class="meta-sep">•</span>
+                    <span>${formatDate(a.date)}</span>
+                    ${a.author ? `<span class="meta-sep">•</span><span class="meta-author">${escHtml(a.author)}</span>` : ''}
+                    <span class="meta-tag" style="background:${topic.color}22;color:${topic.color};">${escHtml(topic.name || key)}</span>
+                    <input type="checkbox" id="${readCheckboxId}" class="read-checkbox" ${isRead ? 'checked' : ''} />
+                    <label for="${readCheckboxId}" class="read-checkbox-label" data-tippy-content="${isRead ? 'Mark as unread' : 'Mark as read'}"></label>
+                  </div>
+                  <h3 class="card-title ${isRead ? 'read-title' : ''}">${escHtml(a.title)}</h3>
+                  <p class="card-desc">${escHtml(a.description)}</p>
+                  <div class="card-footer">
+                      <span class="footer-link">Read article →</span>
+                  </div>
+              </div>`;
 
-      card.addEventListener('click', () => openArticleReader(a));
+      // Important: Force checkbox state after insertion into DOM
+      const checkbox = card.querySelector(`#${readCheckboxId}`);
+      if (checkbox) {
+        checkbox.checked = isRead;           // force sync
+      }
+
+      // Toggle read status when checkbox is clicked
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+
+        if (checkbox.checked) {
+          readArticles.add(a.link);
+          card.classList.add('read-article');
+          card.querySelector('.card-title').classList.add('read-title');
+        } else {
+          readArticles.delete(a.link);
+          card.classList.remove('read-article');
+          card.querySelector('.card-title').classList.remove('read-title');
+        }
+
+        saveReadState();
+      });
+
+      // Open article → mark as read automatically
+      card.addEventListener('click', (e) => {
+        if (!e.target.closest('.read-checkbox, .read-checkbox-label')) {
+          if (!readArticles.has(a.link)) {
+            readArticles.add(a.link);
+            checkbox.checked = true;           // update checkbox visually
+            card.classList.add('read-article');
+            card.querySelector('.card-title').classList.add('read-title');
+            saveReadState();
+          }
+          openArticleReader(a);
+        }
+      });
+
       feed.appendChild(card);
     });
+    initTooltips();
   }
 
   /* ═══ RSS FETCHER ═══ */
-  async function fetchTopic (key) {
+  async function fetchTopic(key) {
     const topic = topics.find(t => t.key === key);
     if (!topic) return [];
     const activeSources = topic.sources.filter(s => sourceOn[key + '__' + s.name] !== false);
@@ -174,111 +264,213 @@
     return all.filter(a => { const k = a.title.toLowerCase().trim(); if (seen.has(k)) return false; seen.add(k); return true; });
   }
 
-  async function fetchFeed (url, sourceName, site) {
+  async function fetchFeed(url, sourceName, site) {
     let xml = null;
     for (const proxy of CORS_PROXIES) {
       try {
         const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) });
         if (res.ok) { xml = await res.text(); break; }
-      } catch (_) { /* next */ }
+      } catch (_) { }
     }
     if (!xml) return [];
     return parseFeed(xml, sourceName, site);
   }
 
-  function parseFeed (xml, sourceName, site) {
+  function parseFeed(xml, sourceName, site) {
     const parser = new DOMParser();
-    const doc    = parser.parseFromString(xml, 'text/xml');
+    const doc = parser.parseFromString(xml, 'text/xml');
     if (doc.querySelector('parsererror')) return [];
-    const items    = doc.querySelectorAll('item, entry');
+
+    const items = doc.querySelectorAll('item, entry');
     const articles = [];
 
     items.forEach(item => {
-      const getText = tag => { const el = item.querySelector(tag); return el ? (el.textContent || '').trim() : ''; };
-      const getAttr = (tag, attr) => { const el = item.querySelector(tag); return el ? (el.getAttribute(attr) || '').trim() : ''; };
+      const getText = tag => {
+        const el = item.querySelector(tag);
+        return el ? (el.textContent || '').trim() : '';
+      };
+      const getAttr = (tag, attr) => {
+        const el = item.querySelector(tag);
+        return el ? (el.getAttribute(attr) || '').trim() : '';
+      };
 
       let title = getText('title') || 'Untitled';
-      let link  = getText('link') || getAttr('link', 'href') || '';
-      let date  = getText('pubDate') || getText('published') || getText('updated') || getText('dc\\:date') || '';
-      let desc  = getText('description') || getText('summary') || getText('content');
+      let link = getText('link') || getAttr('link', 'href') || '';
+      let date = getText('pubDate') || getText('published') || getText('updated') || getText('dc\\:date') || '';
+      let desc = getText('description') || getText('summary') || getText('content') || '';
       desc = stripHtml(desc).substring(0, 300);
 
-      let image = getAttr('enclosure', 'url')
-        || getAttr('media\\:thumbnail', 'url')
-        || getAttr('media\\:content', 'url')
-        || getImgFromContent(getText('description') || getText('summary') || getText('content'))
-        || '';
+      // ─── NEW: Author ───
+      let author = getText('author') ||
+        getText('dc\\:creator') ||
+        getText('name') ||   // atom
+        '';
 
-      articles.push({ title, link, date, description: desc, image, sourceName, site });
+      // ─── NEW: Reading time estimate ───
+      const wordCount = desc.split(/\s+/).filter(Boolean).length;
+      const readingTimeMin = Math.max(1, Math.round(wordCount / 220)); // ~220 words per minute
+      const readingTime = `${readingTimeMin} min read`;
+
+      let image = getAttr('enclosure', 'url') ||
+        getAttr('media\\:thumbnail', 'url') ||
+        getAttr('media\\:content', 'url') ||
+        getImgFromContent(getText('description') || getText('summary') || getText('content')) ||
+        '';
+
+      articles.push({
+        title,
+        link,
+        date,
+        description: desc,
+        image,
+        sourceName,
+        site,
+        author: author || null,           // null if empty
+        readingTime                   // always present
+      });
     });
+
     return articles.slice(0, 12);
   }
 
-  function getImgFromContent (html) {
+  function getImgFromContent(html) {
     if (!html) return '';
     const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
     return m ? m[1] : '';
   }
 
   /* ═══ IN-APP ARTICLE READER ═══ */
-  function bindReaderModal () {
-    $('readerBack').addEventListener('click', closeArticleReader);
+  function bindReaderModal() {
+    // Back button is bound dynamically now
   }
 
-  function openArticleReader (article) {
+  function openArticleReader(article) {
     const modal = $('readerModal');
-    const body  = $('readerBody');
-    const meta  = $('readerMeta');
-    const extLink = $('readerExtLink');
+    const body = $('readerBody');
+    const meta = $('readerMeta');
 
-    extLink.href = article.link || '#';
+    // Remove previous topbar if exists
+    modal.querySelector('.reader-topbar')?.remove();
 
-    // meta row
+    const topbarHTML = `
+      <div class="reader-topbar">
+        <button class="reader-back" id="readerBack" data-tippy-content="Close (Esc)">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 4L6 10l6 6"/></svg>
+          Back
+        </button>
+        <h1 class="reader-sticky-title">${escHtml(article.title)}</h1>
+        <div class="reader-actions">
+          <button class="icon-btn" id="copyUrlBtn" data-tippy-content="Copy article URL">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <button class="icon-btn" id="shareTelegramBtn" data-tippy-content="Share to Telegram">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 2 11 13"/>
+              <path d="M22 2 15 22 11 13 2 9z"/>
+            </svg>
+          </button>
+          <button class="icon-btn reader-settings-btn" data-tippy-content="Reading preferences" id="readerSettingsBtn">
+            <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 2.6 9a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 5 7a1.65 1.65 0 0 0-1-1.51V5a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 15 9a1.65 1.65 0 0 0 1.51 1H17a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+          <a class="icon-btn reader-ext-link" href="${escHtml(article.link)}" data-tippy-content="Open Original Source on New Tab" target="_blank" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </a>
+        </div>
+      </div>`;
+
+    modal.querySelector('.reader-modal-inner').insertAdjacentHTML('afterbegin', topbarHTML);
+
+    // Bind buttons
+    document.getElementById('readerBack').addEventListener('click', closeArticleReader);
+    document.getElementById('readerSettingsBtn').addEventListener('click', () => openPanel('readerPanel'));
+
+    // Copy URL
+    document.getElementById('copyUrlBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(article.link).then(() => {
+        const btn = document.getElementById('copyUrlBtn');
+        const originalColor = btn.style.color;
+        btn.style.color = 'var(--accent-green)';
+        setTimeout(() => { btn.style.color = originalColor || ''; }, 2000);
+      }).catch(() => {
+        alert('Failed to copy URL');
+      });
+    });
+
+    // Share to Telegram
+    document.getElementById('shareTelegramBtn').addEventListener('click', () => {
+      const text = encodeURIComponent(article.title);
+      const url = encodeURIComponent(article.link);
+      window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank', 'noopener,noreferrer');
+    });
+
+    // Meta
     const faviconUrl = getFavicon(article.site || article.link);
     meta.innerHTML = `
       <img class="rmeta-favicon" src="${escHtml(faviconUrl)}" alt="" onerror="this.style.display='none'" />
       <span class="rmeta-site">${escHtml(article.sourceName || article.site || 'Unknown')}</span>
+      ${article.author ? `<span class="rmeta-sep">•</span><span class="rmeta-author">By ${escHtml(article.author)}</span>` : ''}
+      <span class="rmeta-sep">•</span>
+      <span class="rmeta-reading-time">${article.readingTime}</span>
       <span class="rmeta-sep">•</span>
       <span class="rmeta-date">${formatDate(article.date)}</span>`;
 
-    // show modal with loading state
+    // Only content — no duplicate title or image
     body.innerHTML = `
-      <h1 class="reader-title">${escHtml(article.title)}</h1>
-      ${article.image ? `<img class="reader-featured-img" src="${escHtml(article.image)}" alt="" onerror="this.style.display='none'" />` : ''}
       <div class="reader-loading"><div class="loader"></div>Fetching full article…</div>`;
-    modal.classList.add('open');
+
+    $('readerModal').classList.add('open');
     document.body.style.overflow = 'hidden';
 
-    // try to fetch the actual page
     fetchArticleContent(article.link).then(html => {
-      if (!html) {
-        // fallback: show description + link
+      let readingTime = article.readingTime; // fallback to feed estimate
+
+      if (html) {
+        // Calculate from the actual cleaned content
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        const plainText = tempDiv.textContent || tempDiv.innerText || '';
+        readingTime = estimateReadingTime(plainText);
+        body.innerHTML = html;
+      } else {
+        // Fallback case - no full content
         body.innerHTML = `
-          <h1 class="reader-title">${escHtml(article.title)}</h1>
-          ${article.image ? `<img class="reader-featured-img" src="${escHtml(article.image)}" alt="" onerror="this.style.display='none'" />` : ''}
-          <div class="reader-fallback">
-            <p>${escHtml(article.description || 'No preview available.')}</p>
-            <a href="${escHtml(article.link)}" target="_blank" rel="noopener noreferrer" class="reader-ext-link" style="justify-content:center;font-size:15px;">
-              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3h4v4"/><path d="M17 3L8 12"/><path d="M14 10v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>
-              Read full article on ${escHtml(article.sourceName || 'original site')}
-            </a>
-          </div>`;
-        return;
+            <div class="reader-fallback">
+                <p>${escHtml(article.description || 'No preview available.')}</p>
+                <a href="${escHtml(article.link)}" target="_blank" rel="noopener noreferrer" class="reader-ext-link" style="justify-content:center;font-size:15px;">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 3h4v4"/><path d="M17 3L8 12"/><path d="M14 10v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>
+                    Read full article on ${escHtml(article.sourceName || 'original site')}
+                </a>
+            </div>`;
       }
-      // success: render sanitised content
-      body.innerHTML = `
-        <h1 class="reader-title">${escHtml(article.title)}</h1>
-        ${article.image ? `<img class="reader-featured-img" src="${escHtml(article.image)}" alt="" onerror="this.style.display='none'" />` : ''}
-        ${html}`;
+      // Update the meta row with accurate reading time
+      const meta = $('readerMeta');
+      const currentMetaHTML = meta.innerHTML;
+      const updatedMeta = currentMetaHTML.replace(
+        /<span class="rmeta-reading-time">.*?<\/span>/,
+        `<span class="rmeta-reading-time">${readingTime}</span>`
+      );
+      meta.innerHTML = updatedMeta;
     });
+
+    initTooltips();
   }
 
-  function closeArticleReader () {
+  function closeArticleReader() {
     $('readerModal').classList.remove('open');
     document.body.style.overflow = '';
   }
 
-  async function fetchArticleContent (url) {
+  async function fetchArticleContent(url) {
     if (!url) return null;
     for (const proxy of CORS_PROXIES) {
       try {
@@ -287,37 +479,27 @@
           const html = await res.text();
           return extractMainContent(html);
         }
-      } catch (_) { /* next */ }
+      } catch (_) { }
     }
     return null;
   }
 
-  /**
-   * Very simple content extractor:
-   *  1. Parse HTML
-   *  2. Remove scripts / styles / nav / footer / aside / header
-   *  3. Try to find <article>, or the longest <div> by text length
-   *  4. Sanitise: keep only safe tags & attributes
-   */
-  function extractMainContent (html) {
+  function extractMainContent(html) {
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
 
-    // kill noisy elements
-    ['script','style','noscript','nav','header','footer','aside',
-     'iframe','video','audio','canvas','svg',
-     '.sidebar','#sidebar','.ad','.ads','.cookie','[class*=cookie]',
-     '[class*=popup]','[class*=modal]','[class*=banner]',
-     '[class*=nav]','[class*=menu]'
+    ['script', 'style', 'noscript', 'nav', 'header', 'footer', 'aside',
+      'iframe', 'video', 'audio', 'canvas', 'svg',
+      '.sidebar', '#sidebar', '.ad', '.ads', '.cookie', '[class*=cookie]',
+      '[class*=popup]', '[class*=modal]', '[class*=banner]',
+      '[class*=nav]', '[class*=menu]'
     ].forEach(sel => {
       tmp.querySelectorAll(sel).forEach(el => el.remove());
     });
 
-    // prefer <article>
     let container = tmp.querySelector('article');
 
     if (!container) {
-      // fallback: pick the div with the most text
       let best = null, bestLen = 0;
       tmp.querySelectorAll('div, section, main').forEach(el => {
         const len = (el.textContent || '').trim().length;
@@ -328,10 +510,9 @@
 
     if (!container || (container.textContent || '').trim().length < 60) return null;
 
-    // sanitise: whitelist tags
-    const allowed = new Set(['p','div','span','h1','h2','h3','h4','h5','h6',
-      'a','strong','em','b','i','u','ul','ol','li','blockquote',
-      'pre','code','img','br','hr','table','thead','tbody','tr','th','td','caption','figure','figcaption']);
+    const allowed = new Set(['p', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'a', 'strong', 'em', 'b', 'i', 'u', 'ul', 'ol', 'li', 'blockquote',
+      'pre', 'code', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption', 'figure', 'figcaption']);
 
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
     const toRemove = [];
@@ -339,22 +520,21 @@
       if (!allowed.has(walker.currentNode.tagName.toLowerCase())) toRemove.push(walker.currentNode);
     }
     toRemove.forEach(el => {
-      // move children up before removing
       while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
       el.remove();
     });
 
-    // strip all attributes except src on img and href on a
     container.querySelectorAll('*').forEach(el => {
       const tag = el.tagName.toLowerCase();
-      const keep = tag === 'img' ? ['src','alt'] : tag === 'a' ? ['href'] : [];
+      const keep = tag === 'img' ? ['src', 'alt'] : tag === 'a' ? ['href'] : [];
       [...el.attributes].forEach(attr => { if (!keep.includes(attr.name)) el.removeAttribute(attr.name); });
     });
 
-    // make all links open in new tab
-    container.querySelectorAll('a').forEach(a => { a.setAttribute('target','_blank'); a.setAttribute('rel','noopener noreferrer'); });
+    container.querySelectorAll('a').forEach(a => {
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+    });
 
-    // trim empty trailing <p>s
     const ps = container.querySelectorAll('p');
     for (let i = ps.length - 1; i >= 0; i--) {
       if ((ps[i].textContent || '').trim() === '') ps[i].remove();
@@ -365,21 +545,21 @@
   }
 
   /* ═══ PANELS ═══ */
-  function bindPanels () {
+  function bindPanels() {
     $('btnSettings').addEventListener('click', () => { renderSettingsBody(); openPanel('settingsPanel'); });
-    $('settingsClose').addEventListener('click',  () => closePanel('settingsPanel'));
+    $('settingsClose').addEventListener('click', () => closePanel('settingsPanel'));
     $('settingsOverlay').addEventListener('click', () => closePanel('settingsPanel'));
 
-    $('btnReader').addEventListener('click',  () => openPanel('readerPanel'));
-    $('readerClose').addEventListener('click',  () => closePanel('readerPanel'));
+    $('btnReader').addEventListener('click', () => openPanel('readerPanel'));
+    $('readerClose').addEventListener('click', () => closePanel('readerPanel'));
     $('readerOverlay').addEventListener('click', () => closePanel('readerPanel'));
   }
 
-  function openPanel (id) { $(id).classList.add('open'); }
-  function closePanel (id) { $(id).classList.remove('open'); }
+  function openPanel(id) { $(id).classList.add('open'); }
+  function closePanel(id) { $(id).classList.remove('open'); }
 
   /* ═══ SETTINGS BODY ═══ */
-  function renderSettingsBody () {
+  function renderSettingsBody() {
     const body = $('settingsBody');
     let html = '<label class="setting-label">Topics</label><div class="topic-list" id="topicList"></div>';
     html += `<div class="add-topic-wrap"><input type="text" id="newTopicInput" placeholder="e.g. React, Rust, …" /><button id="addTopicBtn">+ Add</button></div>`;
@@ -387,7 +567,6 @@
     html += `<label class="setting-label" style="margin-top:28px;">Default Sources</label><div class="source-group" id="sourceList"></div>`;
     body.innerHTML = html;
 
-    // Topic rows
     const tl = $('topicList');
     topics.forEach(t => {
       const row = document.createElement('div');
@@ -401,7 +580,6 @@
       tl.appendChild(row);
     });
 
-    // Source checkboxes
     const sl = $('sourceList');
     topics.forEach(t => {
       let group = `<div class="source-group-title" style="color:${t.color};">${t.icon} ${escHtml(t.name)}</div>`;
@@ -412,7 +590,7 @@
       sl.insertAdjacentHTML('beforeend', group);
     });
     sl.querySelectorAll('input[type=checkbox]').forEach(cb => {
-      cb.addEventListener('change', function () { sourceOn[this.id.replace('src_','')] = this.checked; saveState(); cache = {}; });
+      cb.addEventListener('change', function () { sourceOn[this.id.replace('src_', '')] = this.checked; saveState(); cache = {}; });
     });
 
     $('addTopicBtn').addEventListener('click', addTopic);
@@ -420,23 +598,24 @@
     $('refreshBtn').addEventListener('click', refreshAll);
   }
 
-  function addTopic () {
+  function addTopic() {
     const input = $('newTopicInput');
-    const raw   = input.value.trim();
+    const raw = input.value.trim();
     if (!raw) return;
     const name = raw.charAt(0).toUpperCase() + raw.slice(1);
-    const key  = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const key = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (!key || topics.find(t => t.key === key)) {
       input.style.borderColor = 'var(--accent-orange)';
       setTimeout(() => input.style.borderColor = '', 1200);
       return;
     }
-    const colors = ['#7b68ee','#60a5fa','#34d399','#fb923c','#f472b6','#a78bfa','#38bdf8'];
-    const emojis = ['📰','💬','🔧','📡','🚀','⚙️','🌟'];
-    const idx   = topics.length % colors.length;
-    const topic = { name, key, color: colors[idx], icon: emojis[idx],
+    const colors = ['#7b68ee', '#60a5fa', '#34d399', '#fb923c', '#f472b6', '#a78bfa', '#38bdf8'];
+    const emojis = ['📰', '💬', '🔧', '📡', '🚀', '⚙️', '🌟'];
+    const idx = topics.length % colors.length;
+    const topic = {
+      name, key, color: colors[idx], icon: emojis[idx],
       sources: [
-        { name: name + ' Blog', url: `https://${key}.io/feed/`,      site: `https://${key}.io` },
+        { name: name + ' Blog', url: `https://${key}.io/feed/`, site: `https://${key}.io` },
         { name: name + ' News', url: `https://${key}news.com/feed/`, site: `https://${key}news.com` }
       ]
     };
@@ -447,7 +626,7 @@
     input.value = '';
   }
 
-  async function refreshAll () {
+  async function refreshAll() {
     cache = {};
     const btn = $('refreshBtn');
     btn.style.opacity = '.5'; btn.style.pointerEvents = 'none';
@@ -459,7 +638,7 @@
   }
 
   /* ═══ READER PREFS ═══ */
-  function bindReader () {
+  function bindReader() {
     document.querySelectorAll('#fontToggle .toggle-btn').forEach(btn => {
       btn.addEventListener('click', function () {
         document.querySelectorAll('#fontToggle .toggle-btn').forEach(b => b.classList.remove('active'));
@@ -484,61 +663,68 @@
     });
   }
 
-  function applyReaderPrefs () {
+  function applyReaderPrefs() {
     const root = document.documentElement;
     const body = document.body;
 
-    /* font family → set the CSS custom property that everything inherits */
     const fontMap = { sans: "'DM Sans', sans-serif", serif: "'Fraunces', serif", mono: "'Source Code Pro', monospace" };
     root.style.setProperty('--current-font', fontMap[readerPrefs.font] || fontMap.sans);
 
-    /* font size → set the CSS custom property; body inherits it, children inherit from body */
     root.style.setProperty('--current-size', readerPrefs.size + 'px');
 
-    /* background */
     root.style.setProperty('--bg-primary', readerPrefs.bg);
     body.style.background = readerPrefs.bg;
 
-    /* light / parchment helper classes */
     body.classList.remove('light-mode', 'parchment-mode');
     if (readerPrefs.bg === '#fafafa') body.classList.add('light-mode');
     if (readerPrefs.bg === '#f5f0eb') body.classList.add('parchment-mode');
 
-    /* sync controls */
-    if ($('fontSizeSlider'))  $('fontSizeSlider').value = readerPrefs.size;
-    if ($('sizePreview'))     $('sizePreview').style.fontSize = readerPrefs.size + 'px';
+    if ($('fontSizeSlider')) $('fontSizeSlider').value = readerPrefs.size;
+    if ($('sizePreview')) $('sizePreview').style.fontSize = readerPrefs.size + 'px';
 
     document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.bg === readerPrefs.bg));
     document.querySelectorAll('#fontToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.font === readerPrefs.font));
   }
 
-  /** Paint each swatch circle with its own bg colour so users see it */
-  function paintSwatches () {
+  function paintSwatches() {
     document.querySelectorAll('.swatch').forEach(sw => {
       sw.style.backgroundColor = sw.dataset.bg;
     });
   }
 
   /* ═══ HELPERS ═══ */
-  function escHtml (s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  function escHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-  function stripHtml (html) {
+
+  function stripHtml(html) {
     const tmp = document.createElement('div');
     tmp.innerHTML = html || '';
     return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
   }
-  function formatDate (d) {
+
+  function formatDate(d) {
     if (!d) return '';
     const date = new Date(d);
     if (isNaN(date)) return d;
     const diff = Date.now() - date;
-    if (diff < 3600000)  return Math.max(1, Math.floor(diff/60000)) + 'm ago';
-    if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+    if (diff < 3600000) return Math.max(1, Math.floor(diff / 60000)) + 'm ago';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
     if (diff < 172800000) return '1d ago';
-    return date.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
-  function getFavicon (url) {
+
+  function estimateReadingTime(text) {
+    if (!text) return '1 min read';
+    // Rough average: 220–250 words per minute
+    // Count words (split on whitespace, remove extra spaces)
+    const words = text.trim().split(/\s+/).length;
+    // More generous for technical content: ~200 wpm
+    const minutes = Math.max(1, Math.ceil(words / 200));
+    return `${minutes} min read`;
+  }
+
+  function getFavicon(url) {
     try { return new URL(url).origin + '/favicon.ico'; } catch (_) { return ''; }
   }
 
