@@ -56,7 +56,7 @@
     `;
       btn.setAttribute('data-tippy-content', 'Show all articles (including read)');
     }
-    initTooltips()
+    initTooltips();
   }
 
   // Toggle function
@@ -211,8 +211,6 @@
     }
   }
 
-
-
   function renderCards(articles, key) {
     feed.innerHTML = '';
     if (!articles.length) {
@@ -269,6 +267,7 @@
                   <p class="card-desc">${escHtml(a.description)}</p>
                   <div class="card-footer">
                       <span class="footer-link">Read article →</span>
+                      <span class="footer-link open">Open in New Tab →</span>
                   </div>
               </div>`;
 
@@ -297,6 +296,11 @@
 
       // Open article → mark as read automatically
       card.addEventListener('click', (e) => {
+        // Skip if user clicked the "Open in New Tab" link
+        if (e.target.closest('.footer-link.open')) {
+          window.open(a.link, "_blank");
+          return; // let the <a> handle it naturally
+        }
         if (!e.target.closest('.read-checkbox, .read-checkbox-label')) {
           if (!readArticles.has(a.link)) {
             readArticles.add(a.link);
@@ -319,14 +323,14 @@
     const topic = topics.find(t => t.key === key);
     if (!topic) return [];
     const activeSources = topic.sources.filter(s => sourceOn[key + '__' + s.name] !== false);
-    const results = await Promise.all(activeSources.map(s => fetchFeed(s.url, s.name, s.site).catch(() => [])));
+    const results = await Promise.all(activeSources.map(s => fetchFeed(s.url, s.name, s.site, s.type).catch(() => [])));
     const all = results.flat();
     all.sort((a, b) => (new Date(b.date) - new Date(a.date)) || 0);
     const seen = new Set();
     return all.filter(a => { const k = a.title.toLowerCase().trim(); if (seen.has(k)) return false; seen.add(k); return true; });
   }
 
-  async function fetchFeed(url, sourceName, site) {
+  async function fetchFeed(url, sourceName, site, type = null) {
     let xml = null;
     for (const proxy of CORS_PROXIES) {
       try {
@@ -335,62 +339,107 @@
       } catch (_) { }
     }
     if (!xml) return [];
-    return parseFeed(xml, sourceName, site);
+    return parseFeed(xml, sourceName, site, type);
   }
 
-  function parseFeed(xml, sourceName, site) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xml, 'text/xml');
-    if (doc.querySelector('parsererror')) return [];
-
-    const items = doc.querySelectorAll('item, entry');
+  async function parseFeed(xmlOrHtml, sourceName, site, type = null) {
     const articles = [];
 
-    items.forEach(item => {
-      const getText = tag => {
-        const el = item.querySelector(tag);
-        return el ? (el.textContent || '').trim() : '';
-      };
-      const getAttr = (tag, attr) => {
-        const el = item.querySelector(tag);
-        return el ? (el.getAttribute(attr) || '').trim() : '';
-      };
+    if (type === 'patchstack') {
+      // ─── Patchstack HTML parsing ───
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlOrHtml, 'text/html');
 
-      let title = getText('title') || 'Untitled';
-      let link = getText('link') || getAttr('link', 'href') || '';
-      let date = getText('pubDate') || getText('published') || getText('updated') || getText('dc\\:date') || '';
-      let desc = getText('description') || getText('summary') || getText('content') || '';
-      desc = stripHtml(desc).substring(0, 300);
+      // Find all vulnerability links
+      const vulnLinks = doc.querySelectorAll('tr>td:first-of-type>a[href^="/database/wordpress/"]');
 
-      // ─── NEW: Author ───
-      let author = getText('author') ||
-        getText('dc\\:creator') ||
-        getText('name') ||   // atom
-        '';
+      vulnLinks.forEach(link => {
+        const href = link.getAttribute('href');
+        if (!href) return;
+        const fullUrl = new URL(href, 'https://patchstack.com').href;
 
-      // ─── NEW: Reading time estimate ───
-      const wordCount = desc.split(/\s+/).filter(Boolean).length;
-      const readingTimeMin = Math.max(1, Math.round(wordCount / 220)); // ~220 words per minute
-      const readingTime = `${readingTimeMin} min read`;
+        // Extract plugin/theme name
+        const nameEl = link.querySelector('.flex.flex-col span:first-child');
+        const name = nameEl ? nameEl.textContent.trim() : 'Unknown Vulnerability';
 
-      let image = getAttr('enclosure', 'url') ||
-        getAttr('media\\:thumbnail', 'url') ||
-        getAttr('media\\:content', 'url') ||
-        getImgFromContent(getText('description') || getText('summary') || getText('content')) ||
-        '';
+        // Extract version range (e.g. <= 1.7)
+        const versionEl = link.querySelector('.whitespace-nowrap.text-dark4');
+        const version = versionEl ? versionEl.textContent.trim() : '';
 
-      articles.push({
-        title,
-        link,
-        date,
-        description: desc,
-        image,
-        sourceName,
-        site,
-        author: author || null,           // null if empty
-        readingTime                   // always present
+        // Extract vulnerability title
+        const titleEl = link.querySelector('span[title]');
+        const title = titleEl ? titleEl.getAttribute('title') || titleEl.textContent.trim() : name;
+
+        // Build description from available parts
+        const descParts = [version, title].filter(Boolean);
+        const description = descParts.length ? descParts.join(' – ') : 'Vulnerability details';
+
+        articles.push({
+          title: `${name}`,
+          link: fullUrl,
+          date: link.parentElement?.parentElement?.querySelector("td:last-of-type")?.textContent.trim(), // Patchstack pages don't show date → use now
+          description: description,
+          image: '', // no image on Patchstack list
+          sourceName,
+          site,
+          author: 'Patchstack',
+          readingTime: '1 min read' // fixed – these are short
+        });
       });
-    });
+      return articles.slice(0, 20);
+    } else {
+      // ─── Normal RSS / Atom XML parsing ───
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlOrHtml, 'text/xml');
+
+      if (doc.querySelector('parsererror')) return [];
+
+      const items = doc.querySelectorAll('item, entry');
+
+      items.forEach(item => {
+        const getText = tag => {
+          const el = item.querySelector(tag);
+          return el ? (el.textContent || '').trim() : '';
+        };
+
+        const getAttr = (tag, attr) => {
+          const el = item.querySelector(tag);
+          return el ? (el.getAttribute(attr) || '').trim() : '';
+        };
+
+        let title = getText('title') || 'Untitled';
+        let link = getText('link') || getAttr('link', 'href') || '';
+        let date = getText('pubDate') || getText('published') || getText('updated') || getText('dc\\:date') || '';
+        let desc = getText('description') || getText('summary') || getText('content') || '';
+        desc = stripHtml(desc).substring(0, 300);
+
+        let author = getText('author') ||
+          getText('dc\\:creator') ||
+          getText('name') || '';
+
+        const wordCount = desc.split(/\s+/).filter(Boolean).length;
+        const readingTimeMin = Math.max(1, Math.round(wordCount / 220));
+        const readingTime = `${readingTimeMin} min read`;
+
+        let image = getAttr('enclosure', 'url') ||
+          getAttr('media\\:thumbnail', 'url') ||
+          getAttr('media\\:content', 'url') ||
+          getImgFromContent(getText('description') || getText('summary') || getText('content')) ||
+          '';
+
+        articles.push({
+          title,
+          link,
+          date,
+          description: desc,
+          image,
+          sourceName,
+          site,
+          author: author || null,
+          readingTime
+        });
+      });
+    }
 
     return articles.slice(0, 12);
   }

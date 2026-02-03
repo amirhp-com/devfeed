@@ -84,7 +84,8 @@ const DEFAULT_TOPICS = [
     color: "#34d399",
     icon: "🛡️",
     sources: [
-      { name: "Patchstack", url: "https://patchstack.com/feed", site: "https://patchstack.com/articles/" }
+      { name: "Patchstack Feed", url: "https://patchstack.com/feed", site: "https://patchstack.com/articles/" },
+      { name: "Patchstack Vulnerability", url: "https://patchstack.com/database/", site: "https://patchstack.com/database/", type: "patchstack" }
     ]
   },
   {
