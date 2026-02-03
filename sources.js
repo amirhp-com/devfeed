@@ -71,10 +71,10 @@ const DEFAULT_TOPICS = [
     icon: "🔐",
     sources: [
       { name: "The Hacker News", url: "https://thehackernews.com/feeds/posts/default", site: "https://thehackernews.com" },
-      { name: "Bleeping Computer", url: "https://www.bleepingcomputer.com/feed/rss/", site: "https://www.bleepingcomputer.com" },
+      { name: "Bleeping Computer", url: "https://www.bleepingcomputer.com/feed/", site: "https://www.bleepingcomputer.com" },
       { name: "SecurityWeek", url: "https://www.securityweek.com/feed/", site: "https://www.securityweek.com" },
-      { name: "OWASP News", url: "https://owasp.org/feed/", site: "https://owasp.org" },
-      { name: "Krebs on Security", url: "https://krebs.feedburner.com/", site: "https://krebsonsecurity.com" }
+      { name: "OWASP News", url: "https://owasp.org/rss.xml", site: "https://owasp.org" },
+      { name: "Krebs on Security", url: "https://krebsonsecurity.com/feed/", site: "https://krebsonsecurity.com" }
     ]
   },
   {
@@ -88,24 +88,13 @@ const DEFAULT_TOPICS = [
     ]
   },
   {
-    name: "Wordfence",
-    key: "wordfence",
-    color: "#60a5fa",
-    icon: "🔒",
-    sources: [
-      { name: "Wordfence Blog", url: "https://www.wordfence.com/blog/feed/", site: "https://www.wordfence.com/blog" },
-      { name: "Wordfence Alerts", url: "https://www.wordfence.com/feed", site: "https://www.wordfence.com/threat-intelligence" }
-    ]
-  },
-  {
     name: "DevOps & Cloud",
     key: "devops",
     color: "#f472b6",
     icon: "☁️",
     sources: [
       { name: "InfoQ", url: "https://www.infoq.com/rss", site: "https://www.infoq.com" },
-      { name: "Docker Blog", url: "https://docs.docker.com/blog/feed/", site: "https://docs.docker.com/blog" },
-      { name: "HashiCorp Blog", url: "https://www.hashicorp.com/blog/feed", site: "https://www.hashicorp.com/blog" },
+      { name: "Docker Blog", url: "https://www.docker.com/feed/", site: "https://docs.docker.com/blog" },
       { name: "The New Stack", url: "https://thenewstack.io/feed/", site: "https://thenewstack.io" }
     ]
   },
@@ -117,7 +106,8 @@ const DEFAULT_TOPICS = [
     sources: [
       { name: "Hacker News (Top)", url: "https://news.ycombinator.com/rss", site: "https://news.ycombinator.com" },
       { name: "GitHub Blog", url: "https://github.blog/feed/", site: "https://github.blog" },
-      { name: "Linux Foundation", url: "https://linuxfoundation.org/feed/", site: "https://linuxfoundation.org" }
+      { name: "Linux Foundation", url: "https://www.linuxfoundation.org/blog/rss.xml", site: "https://linuxfoundation.org" },
+      { name: "Mozilla blog", url: "https://blog.mozilla.org/en/feed/", site: "https://blog.mozilla.org/" }
     ]
   }
 ];

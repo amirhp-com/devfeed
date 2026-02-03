@@ -191,7 +191,7 @@
       const btn = document.createElement('button');
       btn.className = 'tab' + (currentTab === t.key ? ' active' : '');
       btn.dataset.key = t.key;
-      btn.innerHTML = `<span class="tab-dot" style="background:${t.color}"></span><span>${t.icon} ${t.name}</span><span class="tab-count" id="count_${t.key}">…</span>`;
+      btn.innerHTML = `<span style='color:${t.color}'>${t.icon} ${t.name}</span><span class="tab-count" style='color:${t.color}' id="count_${t.key}">…</span>`;
       btn.addEventListener('click', () => selectTab(t.key));
       tabsList.appendChild(btn);
     });
